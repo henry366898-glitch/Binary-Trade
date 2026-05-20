@@ -213,7 +213,7 @@ export default function App() {
         <TradeTicket onToast={setToast} />
       </div>
       <ProfileWidget user={user} />
-      <div className="app-footer">
+      {/* <div className="app-footer">
        
         <button
           type="button"
@@ -226,7 +226,7 @@ export default function App() {
         <a className="app-footer-link" href="/disclaimer">Disclaimer</a>
         <a className="app-footer-link" href="/privacy">Privacy</a>
         <a className="app-footer-link" href="/terms">Terms</a>
-      </div>
+      </div> */}
       {toast && (
         <div className={`toast ${toast.kind}`}>
           <span>{toast.msg}</span>
