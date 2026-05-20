@@ -376,6 +376,7 @@ input:focus { border-color: var(--accent); }
   gap: 1px;
   background: var(--border);
   overflow: hidden;
+  min-height: 0;       /* prevent main from growing beyond its grid row */
 }
 
 .panel {
@@ -429,6 +430,8 @@ input:focus { border-color: var(--accent); }
   display: grid;
   grid-template-rows: 56px 1fr 240px;
   background: var(--bg-1);
+  overflow: hidden;    /* clip chart overflow so trades strip stays at bottom */
+  min-height: 0;       /* let this panel shrink within .main's grid row */
 }
 
 .chart-header {
