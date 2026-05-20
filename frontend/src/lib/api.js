@@ -1,5 +1,10 @@
 // Lightweight API client. Reads token from localStorage.
-const API = '/api';
+//
+// VITE_API_BASE_URL  — set in .env.production when frontend and backend are on
+//                      different origins (e.g. no nginx proxy).
+//                      Leave blank when nginx proxies /api → backend (recommended).
+const BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
+const API  = `${BASE}/api`;
 
 function authHeaders() {
   const t = localStorage.getItem('token');
@@ -35,10 +40,11 @@ export const api = {
   transactions: () => request('/trades/transactions'),
   createTransaction: (data) => request('/trades/transactions', { method: 'POST', body: JSON.stringify(data) }),
   paymentTypes: (direction) => request(`/trades/payment_types${direction ? `?direction=${direction}` : ''}`),
+
   uploadTransactionProof: async (id, file) => {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`/api/trades/transactions/${id}/proof`, {
+    const res = await fetch(`${API}/trades/transactions/${id}/proof`, {
       method: 'POST',
       headers: authHeaders(),
       body: fd,
@@ -52,10 +58,19 @@ export const api = {
   },
 };
 
-// WebSocket helper
+// WebSocket — respects VITE_API_BASE_URL if set
 export function connectStream(onTick) {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${location.host}/api/market/stream`);
+  let wsUrl;
+  if (import.meta.env.VITE_API_BASE_URL) {
+    // absolute backend URL provided — convert http(s) → ws(s)
+    wsUrl = `${BASE}/api/market/stream`.replace(/^http/, 'ws');
+  } else {
+    // same origin — let nginx proxy handle it
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    wsUrl = `${proto}://${location.host}/api/market/stream`;
+  }
+
+  const ws = new WebSocket(wsUrl);
   ws.onmessage = (e) => {
     try { onTick(JSON.parse(e.data)); } catch {}
   };
