@@ -45,7 +45,7 @@ function Header({ onLogout }) {
       <div className="brand">
         <span className="dot"></span>
         EDGETRADE
-        <span className="practice">PRACTICE</span>
+       
       </div>
       <div className="header-right">
         <div className="chart-symbol">{selectedSymbol}</div>
@@ -214,9 +214,7 @@ export default function App() {
       </div>
       <ProfileWidget user={user} />
       <div className="app-footer">
-        <span className="app-footer-text">
-          EdgeTrade is a practice simulation. No real money is traded. Powered by Stewarts Academy.
-        </span>
+       
         <button
           type="button"
           className="app-footer-cta"

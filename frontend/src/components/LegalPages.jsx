@@ -30,12 +30,7 @@ function Shell({ title, children }) {
 export function Disclaimer() {
   return (
     <Shell title="Risk Disclosure & Disclaimer">
-      <p>
-        <strong>EdgeTrade is a practice simulation.</strong> No real money is traded.
-        The balances, trades, and profits shown on this platform are entirely virtual.
-        Nothing on this platform constitutes financial advice, an offer, or a solicitation
-        to engage in real trading of any financial instrument.
-      </p>
+      
 
       <h2>About binary options</h2>
       <p>

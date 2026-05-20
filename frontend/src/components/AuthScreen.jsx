@@ -188,11 +188,7 @@ export default function AuthScreen() {
             {mode === 'login' ? 'Register' : 'Sign in'}
           </button>
         </div>
-        <div className="disclaimer">
-          <strong>PRACTICE SIMULATION.</strong> No real money is involved.
-          Real binary options trading is high-risk: 74–89% of retail traders lose money.
-          This platform is designed to demonstrate trading mechanics for learning.
-        </div>
+       
       </div>
     </div>
   );
