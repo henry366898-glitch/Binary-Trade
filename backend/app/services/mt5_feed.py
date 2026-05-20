@@ -33,6 +33,8 @@ class PriceFeed:
         self.subscribers: list[Callable] = []
         self._running = False
         self._use_mock = False
+        # Historical OHLCV from MT5 bridge: {symbol: {timeframe_min: [candles]}}
+        self._hist_cache: dict[str, dict[int, list[dict]]] = {}
 
     # ----- subscriber pattern (used by market WebSocket router) -----
 
@@ -64,8 +66,27 @@ class PriceFeed:
 
     # ----- bridge client loop -----
 
+    async def _request_history(self, ws, symbol: str, timeframe: int, count: int = 500):
+        """Ask the bridge for historical OHLCV candles for one symbol/timeframe."""
+        try:
+            await ws.send(json.dumps({
+                "type":      "history_request",
+                "symbol":    symbol,
+                "timeframe": timeframe,
+                "count":     count,
+            }))
+        except Exception as e:
+            logger.warning(f"Failed to request history for {symbol}/{timeframe}m: {e}")
+
+    def _store_history(self, symbol: str, timeframe: int, candles: list[dict]):
+        """Cache MT5 historical candles for use in get_candles()."""
+        if symbol not in self._hist_cache:
+            self._hist_cache[symbol] = {}
+        self._hist_cache[symbol][timeframe] = candles
+        logger.info(f"Cached {len(candles)} MT5 candles for {symbol}/{timeframe}m")
+
     async def _bridge_loop(self):
-        """Connect to the MT5 bridge WebSocket and ingest ticks. Auto-reconnects."""
+        """Connect to MT5 bridge, request history, then stream live ticks."""
         url = settings.MT5_BRIDGE_URL
         backoff = 1.0
 
@@ -78,16 +99,35 @@ class PriceFeed:
                     open_timeout=10,
                 ) as ws:
                     logger.info(f"Connected to MT5 bridge at {url}")
-                    backoff = 1.0  # reset on successful connect
+                    backoff = 1.0
+
+                    # Request historical candles for every symbol × timeframe
+                    # Stagger slightly so we don't flood the bridge
+                    for sym in settings.SYMBOLS:
+                        for tf in [1, 5, 15, 60]:
+                            await self._request_history(ws, sym, tf, 500)
+                            await asyncio.sleep(0.05)
+
                     async for raw in ws:
                         if not self._running:
                             return
                         try:
-                            tick = json.loads(raw)
+                            msg = json.loads(raw)
                         except json.JSONDecodeError:
                             continue
-                        self._ingest(tick)
-                        await self._broadcast(tick)
+
+                        msg_type = msg.get("type")
+
+                        if msg_type == "tick":
+                            self._ingest(msg)
+                            await self._broadcast(msg)
+
+                        elif msg_type == "history":
+                            sym      = msg.get("symbol", "")
+                            tf       = int(msg.get("timeframe", 1))
+                            candles  = msg.get("candles", [])
+                            if sym and candles:
+                                self._store_history(sym, tf, candles)
 
             except (OSError, websockets.exceptions.WebSocketException) as e:
                 if not self._running:
@@ -184,12 +224,38 @@ class PriceFeed:
 
     def get_candles(self, symbol: str, timeframe_min: int = 1, count: int = 100) -> list[dict]:
         """
-        Build OHLCV candles from the in-memory tick history.
-        When tick history is shorter than count, backfills with a deterministic
-        synthetic random walk that stitches cleanly to the first real candle.
+        Build OHLCV candles, in priority order:
+          1. Real MT5 historical candles from bridge (most accurate)
+          2. Candles built from in-memory live ticks (since server started)
+          3. Deterministic synthetic backfill (fallback when no bridge history)
         """
-        ticks = self.history.get(symbol, [])
         bucket = timeframe_min * 60
+
+        # ── Priority 1: MT5 real history from bridge ─────────────────────────
+        mt5_hist = self._hist_cache.get(symbol, {}).get(timeframe_min)
+        if mt5_hist:
+            # Merge with any newer live-tick candles we've built
+            ticks = self.history.get(symbol, [])
+            live_candles: dict[int, dict] = {}
+            for t in ticks:
+                mid  = (t["bid"] + t["ask"]) / 2
+                slot = int(t["time"] // bucket) * bucket
+                c    = live_candles.get(slot)
+                if c is None:
+                    live_candles[slot] = {"time": slot, "open": mid, "high": mid, "low": mid, "close": mid}
+                else:
+                    c["high"]  = max(c["high"], mid)
+                    c["low"]   = min(c["low"],  mid)
+                    c["close"] = mid
+
+            # Build combined list: MT5 history as base, live ticks override recent slots
+            combined: dict[int, dict] = {c["time"]: c for c in mt5_hist}
+            combined.update(live_candles)
+            result = sorted(combined.values(), key=lambda x: x["time"])
+            return result[-count:]
+
+        # ── Priority 2: Build from in-memory live ticks ──────────────────────
+        ticks = self.history.get(symbol, [])
         candles: dict[int, dict] = {}
 
         for t in ticks:
@@ -219,7 +285,7 @@ class PriceFeed:
                 return []
             base        = (latest["bid"] + latest["ask"]) / 2
             now         = int(latest["time"])
-            anchor_time = (now // bucket) * bucket   # current slot (not +1)
+            anchor_time = (now // bucket) * bucket
 
         digits = self._sym_digits(symbol)
         # volatility per candle: crypto/gold higher than forex

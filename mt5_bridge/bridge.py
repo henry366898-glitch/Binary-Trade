@@ -87,6 +87,7 @@ def _try_connect_mt5() -> bool:
 
     info = mt5.account_info()
     logger.info(f"MT5 connected ✓  account={info.login if info else 'unknown'}")
+    _fill_tf_map()
     return True
 
 
@@ -109,13 +110,80 @@ async def _wait_for_mt5() -> None:
         backoff = min(backoff * 2, 60)
 
 
+# ── Timeframe map ──────────────────────────────────────────────────────────────
+_TF_MAP = {
+    1:  None,   # filled after mt5 import
+    5:  None,
+    15: None,
+    60: None,
+}
+
+
+def _fill_tf_map():
+    _TF_MAP[1]  = mt5.TIMEFRAME_M1
+    _TF_MAP[5]  = mt5.TIMEFRAME_M5
+    _TF_MAP[15] = mt5.TIMEFRAME_M15
+    _TF_MAP[60] = mt5.TIMEFRAME_H1
+
+
+async def _handle_history_request(ws: "WebSocketServerProtocol", data: dict):
+    """Respond to a history_request message with real MT5 OHLCV data."""
+    if not _mt5_ready:
+        return
+    symbol    = data.get("symbol", "EURUSD")
+    tf_min    = int(data.get("timeframe", 1))
+    count     = int(data.get("count", 300))
+    tf        = _TF_MAP.get(tf_min, mt5.TIMEFRAME_M1)
+
+    try:
+        rates = mt5.copy_rates_from_pos(symbol, tf, 0, count)
+    except Exception as e:
+        logger.warning(f"History request failed for {symbol}/{tf_min}m: {e}")
+        return
+
+    if rates is None or len(rates) == 0:
+        logger.warning(f"No history data for {symbol}/{tf_min}m")
+        return
+
+    candles = [
+        {
+            "time":  int(r["time"]),
+            "open":  float(r["open"]),
+            "high":  float(r["high"]),
+            "low":   float(r["low"]),
+            "close": float(r["close"]),
+        }
+        for r in rates
+    ]
+    payload = json.dumps({
+        "type":      "history",
+        "symbol":    symbol,
+        "timeframe": tf_min,
+        "candles":   candles,
+    })
+    try:
+        await ws.send(payload)
+        logger.info(f"Sent {len(candles)} candles for {symbol}/{tf_min}m")
+    except Exception:
+        pass
+
+
 # ── WebSocket server ───────────────────────────────────────────────────────────
 async def _client_handler(ws: "WebSocketServerProtocol"):
     _clients.add(ws)
     addr = ws.remote_address
     logger.info(f"Client connected: {addr}  (total: {len(_clients)})")
     try:
-        await ws.wait_closed()
+        # Handle incoming messages (history requests) while keeping connection open
+        async for raw in ws:
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if data.get("type") == "history_request":
+                asyncio.create_task(_handle_history_request(ws, data))
+    except Exception:
+        pass
     finally:
         _clients.discard(ws)
         logger.info(f"Client disconnected: {addr}  (total: {len(_clients)})")

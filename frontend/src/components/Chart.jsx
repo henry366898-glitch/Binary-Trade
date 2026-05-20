@@ -22,6 +22,7 @@ export default function Chart() {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
+      autoSize: true,          // chart resizes automatically with its container
       layout: {
         background: { color: '#11161e' },
         textColor: '#8896a8',
@@ -32,7 +33,11 @@ export default function Chart() {
         vertLines: { color: '#1d2531' },
         horzLines: { color: '#1d2531' },
       },
-      rightPriceScale: { borderColor: '#232b38' },
+      rightPriceScale: {
+        borderColor: '#232b38',
+        visible: true,
+        minimumWidth: 70,      // ensure the price axis always has enough room
+      },
       timeScale: { borderColor: '#232b38', timeVisible: true, secondsVisible: true },
       crosshair: {
         vertLine: { color: '#56657a', width: 1, style: 3 },
@@ -52,16 +57,7 @@ export default function Chart() {
     chartRef.current = chart;
     seriesRef.current = series;
 
-    const ro = new ResizeObserver(() => {
-      chart.applyOptions({
-        width: containerRef.current.clientWidth,
-        height: containerRef.current.clientHeight,
-      });
-    });
-    ro.observe(containerRef.current);
-
     return () => {
-      ro.disconnect();
       chart.remove();
     };
   }, []);
