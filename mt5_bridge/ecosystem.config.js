@@ -14,7 +14,9 @@
 //   4. Copy .env.example → .env and fill in MT5 credentials
 
 const isWin = process.platform === 'win32';
-const python = isWin ? 'venv\\Scripts\\python.exe' : 'venv/bin/python';
+// Change 'venev' below to match whatever you named your virtualenv folder
+const venvName = 'venev';
+const python = isWin ? `${venvName}\\Scripts\\python.exe` : `${venvName}/bin/python`;
 
 module.exports = {
   apps: [
