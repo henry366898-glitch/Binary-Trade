@@ -1,3 +1,7 @@
 MetaTrader5==5.0.5735
 websockets==13.1
 python-dotenv==1.0.1
+
+# ── test_app.py dependencies ──────────────────────────────────────────────────
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
