@@ -35,6 +35,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"   # silently ignore unknown vars (e.g. PYTHONUNBUFFERED, NODE_ENV)
 
 
 settings = Settings()
