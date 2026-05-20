@@ -47,7 +47,7 @@ async def settle_trade(trade: Trade) -> None:
 
     # Atomic balance credit — avoids read-modify-write races if ever concurrent
     if refund > 0:
-        await User.find_one(User.id == trade.user_id).update(Inc(User.balance, refund))
+        await User.find_one(User.id == trade.user_id).update(Inc({User.balance: refund}))
 
     logger.info(
         f"Settled trade {trade.id} {trade.symbol} {trade.direction} "

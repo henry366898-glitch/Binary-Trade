@@ -91,7 +91,7 @@ async def place_trade(
         raise HTTPException(400, f"Market closed for {data.symbol}. Try a different symbol or wait for the session to reopen.")
 
     # Atomically deduct stake
-    await User.find_one(User.id == user.id).update(Inc(User.balance, -data.amount))
+    await User.find_one(User.id == user.id).update(Inc({User.balance: -data.amount}))
 
     now = datetime.utcnow()
     trade = Trade(
