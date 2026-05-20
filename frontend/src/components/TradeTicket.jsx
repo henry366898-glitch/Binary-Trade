@@ -4,21 +4,162 @@ import { openAcademyCta } from '../lib/leadCta';
 
 const STREAK_THRESHOLD = 5;
 
+/* ── Circular countdown timer ─────────────────────────────────────────────── */
+function CircularCountdown({ expiresAt, totalSeconds }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(id);
+  }, []);
+
+  const msLeft  = Math.max(0, new Date(expiresAt + 'Z').getTime() - now);
+  const sLeft   = Math.ceil(msLeft / 1000);
+  const frac    = msLeft / (totalSeconds * 1000); // 1 → 0
+  const urgent  = frac < 0.25 && msLeft > 0;
+
+  const R     = 38;
+  const circ  = 2 * Math.PI * R;
+  const dash  = Math.max(0, frac) * circ;
+
+  return (
+    <div className="circular-timer">
+      <svg viewBox="0 0 100 100" className="circular-timer-svg">
+        {/* background track */}
+        <circle cx="50" cy="50" r={R} className="timer-track" />
+        {/* animated arc */}
+        <circle
+          cx="50" cy="50" r={R}
+          className="timer-arc"
+          style={{
+            strokeDasharray: `${dash} ${circ}`,
+            stroke: urgent ? 'var(--down)' : 'var(--accent)',
+          }}
+        />
+      </svg>
+      <div className="circular-timer-label">
+        {msLeft <= 0 ? (
+          <span className="timer-settling">settling</span>
+        ) : (
+          <>
+            <span className={`timer-secs ${urgent ? 'urgent' : ''}`}>{sLeft}</span>
+            <span className="timer-unit">sec</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Active trade card ────────────────────────────────────────────────────── */
+function ActiveTradeCard({ trade, currentPrice, digits }) {
+  const totalSeconds = Math.max(
+    1,
+    Math.round(
+      (new Date(trade.expires_at + 'Z') - new Date(trade.opened_at + 'Z')) / 1000
+    )
+  );
+
+  const mid     = currentPrice;
+  let winning   = null;
+  let priceDiff = 0;
+
+  if (mid != null) {
+    const movedUp = mid > trade.entry_price;
+    winning   = (trade.direction === 'up' && movedUp) || (trade.direction === 'down' && !movedUp);
+    priceDiff = mid - trade.entry_price;
+  }
+
+  const sign = priceDiff >= 0 ? '+' : '';
+
+  return (
+    <div className={`active-trade-card ${trade.direction}`}>
+      {/* header row: direction + stake */}
+      <div className="atc-header">
+        <span className={`atc-direction ${trade.direction}`}>
+          {trade.direction === 'up' ? '▲ UP' : '▼ DOWN'}
+        </span>
+        <span className="atc-amount">${Number(trade.amount).toFixed(2)}</span>
+      </div>
+
+      {/* circular timer */}
+      <CircularCountdown expiresAt={trade.expires_at} totalSeconds={totalSeconds} />
+
+      {/* price comparison */}
+      <div className="atc-prices">
+        <div className="atc-price-row">
+          <span className="atc-label">Entry</span>
+          <span className="atc-val">{trade.entry_price.toFixed(digits)}</span>
+        </div>
+        {mid != null && (
+          <div className="atc-price-row">
+            <span className="atc-label">Now</span>
+            <span className={`atc-val ${winning ? 'up' : 'down'}`}>
+              {mid.toFixed(digits)}
+              <span className="atc-diff">
+                &nbsp;({sign}{priceDiff.toFixed(digits)})
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* win / lose status bar */}
+      {winning !== null && (
+        <div className={`atc-status ${winning ? 'winning' : 'losing'}`}>
+          <span>{winning ? '▲ WINNING' : '▼ LOSING'}</span>
+          <span className="atc-payout">
+            {winning
+              ? `+$${(Number(trade.amount) * trade.payout_rate).toFixed(2)}`
+              : `-$${Number(trade.amount).toFixed(2)}`}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Settlement result flash ──────────────────────────────────────────────── */
+function ResultFlash({ result, onDone }) {
+  useEffect(() => {
+    const id = setTimeout(onDone, 3500);
+    return () => clearTimeout(id);
+  }, []);
+
+  const won = result.status === 'won';
+  return (
+    <div className={`trade-result-flash ${result.status}`}>
+      <div className="trf-icon">{won ? '✓' : '✗'}</div>
+      <div className="trf-status">{won ? 'YOU WON' : 'YOU LOST'}</div>
+      <div className="trf-amount">
+        {won ? `+$${result.profit.toFixed(2)}` : `-$${Number(result.amount).toFixed(2)}`}
+      </div>
+      {won && <div className="trf-sub">Credited to your balance</div>}
+      <button className="trf-dismiss" onClick={onDone}>×</button>
+    </div>
+  );
+}
+
+/* ── Main component ───────────────────────────────────────────────────────── */
 export default function TradeTicket({ onToast }) {
   const {
     amount, expirySeconds, expiryOptions, payoutRate,
     setAmount, setExpiry, placeTrade, user, stats, trades,
     selectedSymbol, prices,
   } = useStore();
-  const [busy, setBusy] = useState(false);
-  const [now, setNow] = useState(Date.now());
-  // tick a 1-Hz clock so the market-closed check stays fresh even with no incoming WS ticks
+
+  const [busy, setBusy]           = useState(false);
+  const [now, setNow]             = useState(Date.now());
+  const [resultFlash, setResult]  = useState(null); // settled trade to flash
+
+  // 1-Hz clock for market-closed check
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
-  const tick = prices[selectedSymbol];
+
+  const tick         = prices[selectedSymbol];
   const marketClosed = tick ? (now / 1000 - tick.time) > 60 : false;
+  const mid          = tick ? (tick.bid + tick.ask) / 2 : null;
 
   // digits for price display
   const digits = selectedSymbol === 'USDJPY' ? 3
@@ -45,7 +186,27 @@ export default function TradeTicket({ onToast }) {
     prevTickRef.current = tick;
   }, [tick]);
 
-  // count consecutive losses among most recent settled trades
+  // Open trades on the current symbol
+  const openTrades = useMemo(
+    () => (trades || []).filter((t) => t.status === 'open' && t.symbol === selectedSymbol),
+    [trades, selectedSymbol]
+  );
+
+  // Detect settlement — compare prev open trades to current
+  const prevTradesRef = useRef([]);
+  useEffect(() => {
+    const prevOpen = prevTradesRef.current.filter((t) => t.status === 'open' && t.symbol === selectedSymbol);
+    for (const po of prevOpen) {
+      const settled = (trades || []).find((t) => t.id === po.id && t.status !== 'open');
+      if (settled && (settled.status === 'won' || settled.status === 'lost')) {
+        setResult(settled);
+        break;
+      }
+    }
+    prevTradesRef.current = trades || [];
+  }, [trades, selectedSymbol]);
+
+  // Consecutive losses nudge
   const consecutiveLosses = useMemo(() => {
     let n = 0;
     for (const t of trades) {
@@ -70,10 +231,8 @@ export default function TradeTicket({ onToast }) {
     }
   };
 
-  const payout = (Number(amount) * payoutRate).toFixed(2);
-
-  const fmtExpiry = (s) =>
-    s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
+  const payout    = (Number(amount) * payoutRate).toFixed(2);
+  const fmtExpiry = (s) => s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`;
 
   return (
     <div className="ticket">
@@ -96,16 +255,29 @@ export default function TradeTicket({ onToast }) {
         </div>
       </div>
 
+      {/* Settlement result flash */}
+      {resultFlash && (
+        <ResultFlash result={resultFlash} onDone={() => setResult(null)} />
+      )}
+
+      {/* Active trade cards */}
+      {openTrades.length > 0 && !resultFlash && (
+        <div className="active-trades-section">
+          <div className="active-trades-label">
+            {openTrades.length === 1 ? 'ACTIVE TRADE' : `ACTIVE TRADES (${openTrades.length})`}
+          </div>
+          {openTrades.map((t) => (
+            <ActiveTradeCard key={t.id} trade={t} currentPrice={mid} digits={digits} />
+          ))}
+        </div>
+      )}
+
       {showStreakNudge && (
         <div className="streak-nudge">
           <div className="streak-nudge-text">
             {consecutiveLosses} losses in a row. Trading without training usually looks like this.
           </div>
-          <button
-            type="button"
-            className="streak-nudge-cta"
-            onClick={() => openAcademyCta('nudge_streak')}
-          >
+          <button type="button" className="streak-nudge-cta" onClick={() => openAcademyCta('nudge_streak')}>
             Free 15-min consultation →
           </button>
         </div>
@@ -121,9 +293,7 @@ export default function TradeTicket({ onToast }) {
         <div className="field-label">Amount (USD)</div>
         <div className="amount-row">
           <input
-            type="number"
-            min="1"
-            step="1"
+            type="number" min="1" step="1"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
           />

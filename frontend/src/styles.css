@@ -573,6 +573,16 @@ input:focus { border-color: var(--accent); }
   border-bottom: 1px solid var(--border);
 }
 .trades-table tr:hover td { background: var(--bg-2); }
+/* Highlight open (active) trade rows */
+.trades-table tr.row-open td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.trades-table tr.row-open:hover td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.trades-table tr.row-open td:first-child {
+  border-left: 3px solid var(--accent);
+  padding-left: 9px;
+}
 .tag {
   display: inline-block;
   padding: 2px 8px;
@@ -585,6 +595,25 @@ input:focus { border-color: var(--accent); }
 .tag.up { background: var(--up-dim); color: var(--up); }
 .tag.down { background: var(--down-dim); color: var(--down); }
 .tag.open { background: var(--accent-dim); color: var(--accent); }
+.countdown-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  transition: background 0.3s, color 0.3s;
+}
+.countdown-badge.urgent {
+  background: var(--down-dim);
+  color: var(--down);
+  animation: urgentPulse 0.5s ease-in-out infinite alternate;
+}
 .tag.won { background: var(--up-dim); color: var(--up); }
 .tag.lost { background: var(--down-dim); color: var(--down); }
 
@@ -642,6 +671,221 @@ input:focus { border-color: var(--accent); }
   width: 1px;
   background: var(--border);
   margin: 8px 0;
+}
+
+/* ── Active trade cards ──────────────────────────────────────────────────── */
+.active-trades-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.active-trades-label {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.active-trade-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.active-trade-card.up   { border-color: var(--up);   box-shadow: 0 0 18px var(--up-glow); }
+.active-trade-card.down { border-color: var(--down); box-shadow: 0 0 18px var(--down-glow); }
+
+.atc-header {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+}
+.atc-direction {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.atc-direction.up   { color: var(--up); }
+.atc-direction.down { color: var(--down); }
+.atc-amount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* Circular countdown */
+.circular-timer {
+  position: relative;
+  width: 96px;
+  height: 96px;
+}
+.circular-timer-svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg); /* start arc at 12 o'clock */
+}
+.timer-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 6;
+}
+.timer-arc {
+  fill: none;
+  stroke-width: 6;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.1s linear, stroke 0.4s;
+}
+.circular-timer-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  pointer-events: none;
+}
+.timer-secs {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  transition: color 0.3s;
+}
+.timer-secs.urgent { color: var(--down); animation: urgentPulse 0.6s ease-in-out infinite alternate; }
+.timer-unit {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.timer-settling {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.1em;
+  animation: urgentPulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes urgentPulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+.atc-prices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  background: var(--bg-3);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.atc-price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.atc-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.atc-val {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.atc-val.up   { color: var(--up); }
+.atc-val.down { color: var(--down); }
+.atc-diff {
+  font-size: 10px;
+  opacity: 0.75;
+}
+
+.atc-status {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.atc-status.winning { background: var(--up-dim);   color: var(--up); }
+.atc-status.losing  { background: var(--down-dim); color: var(--down); }
+.atc-payout { font-size: 14px; }
+
+/* ── Settlement result flash ─────────────────────────────────────────────── */
+.trade-result-flash {
+  border-radius: 12px;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  position: relative;
+  animation: resultPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.trade-result-flash.won  { background: var(--up-dim);   border: 1px solid var(--up); }
+.trade-result-flash.lost { background: var(--down-dim); border: 1px solid var(--down); }
+.trf-icon {
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 1;
+}
+.won  .trf-icon { color: var(--up); }
+.lost .trf-icon { color: var(--down); }
+.trf-status {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.won  .trf-status { color: var(--up); }
+.lost .trf-status { color: var(--down); }
+.trf-amount {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+.won  .trf-amount { color: var(--up); }
+.lost .trf-amount { color: var(--down); }
+.trf-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.trf-dismiss {
+  position: absolute;
+  top: 8px; right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+@keyframes resultPop {
+  from { transform: scale(0.75); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
 
 .field {
