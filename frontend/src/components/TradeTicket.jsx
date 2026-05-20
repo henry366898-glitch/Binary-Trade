@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { openAcademyCta } from '../lib/leadCta';
 
@@ -19,6 +19,31 @@ export default function TradeTicket({ onToast }) {
   }, []);
   const tick = prices[selectedSymbol];
   const marketClosed = tick ? (now / 1000 - tick.time) > 60 : false;
+
+  // digits for price display
+  const digits = selectedSymbol === 'USDJPY' ? 3
+    : selectedSymbol.startsWith('BTC') || selectedSymbol.startsWith('ETH') || selectedSymbol.startsWith('XAU') ? 2
+    : 5;
+
+  // flash animation when bid/ask change
+  const prevTickRef = useRef(null);
+  const [bidFlash, setBidFlash] = useState('');
+  const [askFlash, setAskFlash] = useState('');
+  useEffect(() => {
+    if (!tick) return;
+    const prev = prevTickRef.current;
+    if (prev) {
+      if (tick.bid !== prev.bid) {
+        setBidFlash(tick.bid > prev.bid ? 'flash-up' : 'flash-down');
+        setTimeout(() => setBidFlash(''), 250);
+      }
+      if (tick.ask !== prev.ask) {
+        setAskFlash(tick.ask > prev.ask ? 'flash-up' : 'flash-down');
+        setTimeout(() => setAskFlash(''), 250);
+      }
+    }
+    prevTickRef.current = tick;
+  }, [tick]);
 
   // count consecutive losses among most recent settled trades
   const consecutiveLosses = useMemo(() => {
@@ -53,6 +78,23 @@ export default function TradeTicket({ onToast }) {
   return (
     <div className="ticket">
       <div className="ticket-title">PLACE TRADE</div>
+
+      {/* Live bid / ask price display */}
+      <div className="ticket-live-price">
+        <div className="ticket-price-col">
+          <span className="ticket-price-label">BID</span>
+          <span className={`ticket-price-val down ${bidFlash}`}>
+            {tick ? tick.bid.toFixed(digits) : '—'}
+          </span>
+        </div>
+        <div className="ticket-price-divider" />
+        <div className="ticket-price-col">
+          <span className="ticket-price-label">ASK</span>
+          <span className={`ticket-price-val up ${askFlash}`}>
+            {tick ? tick.ask.toFixed(digits) : '—'}
+          </span>
+        </div>
+      </div>
 
       {showStreakNudge && (
         <div className="streak-nudge">
