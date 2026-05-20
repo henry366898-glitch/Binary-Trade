@@ -9,6 +9,7 @@ The bridge handles all MT5-specific code (Windows-only). This service is
 platform-agnostic.
 """
 import asyncio
+import hashlib
 import json
 import logging
 import math
@@ -159,10 +160,33 @@ class PriceFeed:
             return None
         return (t["bid"] + t["ask"]) / 2
 
+    # decimal places per symbol category for synthetic candle rounding
+    _DIGITS: dict[str, int] = {
+        "USDJPY": 3,
+        "XAUUSD": 2, "XAGUSD": 2,
+        "BTCUSD": 2, "BTCUSDT": 2,
+        "ETHUSD": 2, "ETHUSDT": 2,
+    }
+
+    @staticmethod
+    def _sym_digits(symbol: str) -> int:
+        for k, v in PriceFeed._DIGITS.items():
+            if symbol.startswith(k[:3]):
+                return v
+        return 5
+
+    @staticmethod
+    def _make_rng(symbol: str, anchor_time: int) -> random.Random:
+        """Deterministic RNG seeded by symbol + anchor so chart is stable between loads."""
+        seed_bytes = f"{symbol}:{anchor_time}".encode()
+        seed_int = int(hashlib.md5(seed_bytes).hexdigest(), 16) & 0xFFFF_FFFF
+        return random.Random(seed_int)
+
     def get_candles(self, symbol: str, timeframe_min: int = 1, count: int = 100) -> list[dict]:
         """
         Build OHLCV candles from the in-memory tick history.
-        Works identically whether the feed is live (bridge) or mock.
+        When tick history is shorter than count, backfills with a deterministic
+        synthetic random walk that stitches cleanly to the first real candle.
         """
         ticks = self.history.get(symbol, [])
         bucket = timeframe_min * 60
@@ -176,43 +200,59 @@ class PriceFeed:
                 candles[slot] = {"time": slot, "open": mid, "high": mid, "low": mid, "close": mid}
             else:
                 c["high"] = max(c["high"], mid)
-                c["low"] = min(c["low"], mid)
+                c["low"]  = min(c["low"],  mid)
                 c["close"] = mid
 
         real = sorted(candles.values(), key=lambda x: x["time"])
 
-        # backfill synthetic candles if tick history doesn't cover enough bars
         if len(real) >= count:
             return real[-count:]
 
         needed = count - len(real)
+
         if real:
             anchor_time = real[0]["time"]
-            base = real[0]["open"]
+            base        = real[0]["open"]
         else:
             latest = self.latest.get(symbol)
             if not latest:
                 return []
-            base = (latest["bid"] + latest["ask"]) / 2
-            now = int(latest["time"])
-            anchor_time = (now // bucket) * bucket + bucket
+            base        = (latest["bid"] + latest["ask"]) / 2
+            now         = int(latest["time"])
+            anchor_time = (now // bucket) * bucket   # current slot (not +1)
 
-        vol = 0.0015 if symbol in ("BTCUSD", "ETHUSD") else 0.0003
+        digits = self._sym_digits(symbol)
+        # volatility per candle: crypto/gold higher than forex
+        vol = 0.0015 if symbol in ("BTCUSD", "ETHUSD", "BTCUSDT", "ETHUSDT") else \
+              0.0005 if symbol in ("XAUUSD", "XAGUSD") else 0.0002
+
+        rng = self._make_rng(symbol, anchor_time)
+
+        # ── Generate a backwards random walk ending exactly at `base` ────────
+        # Walk backwards (needed+1 price points), then reverse so the final
+        # point == base, guaranteeing the last synthetic candle closes at the
+        # same price as the first real candle opens — no visible gap.
+        pts = [base]
+        for _ in range(needed):
+            drift = (rng.random() - 0.5) * vol * pts[-1]
+            pts.append(max(0.0001, pts[-1] + drift))
+        pts.reverse()   # pts[0]=oldest, pts[needed]=base
+
         synth: list[dict] = []
-        cursor = base
-        for i in range(needed, 0, -1):
-            slot = anchor_time - i * bucket
-            drift = (random.random() - 0.5) * vol * cursor
-            open_p = cursor
-            close_p = max(0.0, cursor + drift)
-            hi = max(open_p, close_p) + abs(random.random() * vol * cursor / 2)
-            lo = min(open_p, close_p) - abs(random.random() * vol * cursor / 2)
+        for i in range(needed):
+            slot    = anchor_time - (needed - i) * bucket
+            open_p  = pts[i]
+            close_p = pts[i + 1]
+            wick    = abs(rng.random()) * vol * open_p * 0.5
+            hi      = max(open_p, close_p) + wick
+            lo      = min(open_p, close_p) - wick
             synth.append({
-                "time": slot,
-                "open": round(open_p, 5), "high": round(hi, 5),
-                "low": round(lo, 5), "close": round(close_p, 5),
+                "time":  slot,
+                "open":  round(open_p,  digits),
+                "high":  round(hi,      digits),
+                "low":   round(lo,      digits),
+                "close": round(close_p, digits),
             })
-            cursor = close_p
 
         return synth + real
 

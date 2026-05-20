@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import admin, auth, leads, market, trades
+from app.services.binance_feed import binance_feed_loop
 from app.services.db import init_db
 from app.services.mt5_feed import price_feed
 from app.services.settlement import settlement_loop
@@ -31,6 +32,9 @@ async def lifespan(app: FastAPI):
     logger.info("Starting MT5 price feed…")
     feed_task = asyncio.create_task(price_feed.start())
 
+    logger.info("Starting Binance crypto feed (BTCUSD / ETHUSD)…")
+    binance_task = asyncio.create_task(binance_feed_loop(price_feed))
+
     logger.info("Starting trade settlement loop…")
     settle_task = asyncio.create_task(settlement_loop())
 
@@ -40,8 +44,9 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down…")
     await price_feed.stop()
     feed_task.cancel()
+    binance_task.cancel()
     settle_task.cancel()
-    for t in (feed_task, settle_task):
+    for t in (feed_task, binance_task, settle_task):
         try:
             await t
         except (asyncio.CancelledError, Exception):
