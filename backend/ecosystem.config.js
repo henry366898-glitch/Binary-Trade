@@ -10,9 +10,10 @@ module.exports = {
   apps: [
     {
       name: "edgetrade-api",
-      script: "venv/bin/uvicorn",             // path inside backend/
-      args: "app.main:app --host 0.0.0.0 --port 8010 --workers 2 --loop uvloop --http httptools",
-      cwd: __dirname,                          // always run from backend/
+      script: "venv/bin/python",              // use the venv Python directly
+      args: "-m uvicorn app.main:app --host 0.0.0.0 --port 8010 --workers 2 --loop uvloop --http httptools",
+      interpreter: "none",                    // tell PM2: not a Node script, run the binary as-is
+      cwd: __dirname,                         // always run from backend/
 
       // --- process model ---
       instances: 1,                            // PM2 manages 1 process; uvicorn handles workers internally
