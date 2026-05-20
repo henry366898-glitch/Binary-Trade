@@ -11,7 +11,7 @@ module.exports = {
     {
       name: "edgetrade-api",
       script: "venv/bin/uvicorn",             // path inside backend/
-      args: "app.main:app --host 0.0.0.0 --port 8000 --workers 2 --loop uvloop --http httptools",
+      args: "app.main:app --host 0.0.0.0 --port 8010 --workers 2 --loop uvloop --http httptools",
       cwd: __dirname,                          // always run from backend/
 
       // --- process model ---
