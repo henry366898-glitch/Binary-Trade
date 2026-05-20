@@ -466,8 +466,27 @@ input:focus { border-color: var(--accent); }
 }
 
 .chart-container {
-  position: relative;
   background: var(--bg-1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Toolbar row — lives ABOVE the canvas so clicks always work */
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Canvas wrapper fills remaining height */
+.chart-canvas-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
 }
 
 .chart-watermark {
@@ -482,13 +501,10 @@ input:focus { border-color: var(--accent); }
   z-index: 1;
 }
 
+/* Legacy class kept for any references — now unused by Chart.jsx */
 .timeframe-pills {
-  position: absolute;
-  top: 14px;
-  left: 14px;
   display: flex;
   gap: 6px;
-  z-index: 2;
 }
 .timeframe-btn {
   padding: 6px 12px;
@@ -1827,7 +1843,7 @@ select:focus { border-color: var(--accent); }
   /* ── Chart panel ────────────────────────────────────────────────────── */
   .chart-panel     { grid-template-rows: 44px 260px auto; flex-shrink: 0; }
   .chart-header    { padding: 0 12px; }
-  .timeframe-pills { top: 10px; left: 10px; gap: 4px; }
+  .chart-toolbar   { padding: 8px 10px; gap: 4px; }
   .timeframe-btn   { padding: 5px 9px; font-size: 10px; }
   .chart-watermark { font-size: 10px; bottom: 10px; right: 12px; }
 

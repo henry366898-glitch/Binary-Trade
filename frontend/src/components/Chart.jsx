@@ -167,7 +167,7 @@ export default function Chart() {
 
   return (
     <div className="chart-container">
-      <div className="timeframe-pills">
+      <div className="chart-toolbar">
         {[1, 5, 15, 60].map((tf) => (
           <button
             key={tf}
@@ -178,8 +178,10 @@ export default function Chart() {
           </button>
         ))}
       </div>
-      <div className="chart-watermark">{selectedSymbol} · {tfLabel(selectedTimeframe)} · PRACTICE</div>
-      <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      <div className="chart-canvas-wrap">
+        <div className="chart-watermark">{selectedSymbol} · {tfLabel(selectedTimeframe)} · PRACTICE</div>
+        <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      </div>
     </div>
   );
 }
