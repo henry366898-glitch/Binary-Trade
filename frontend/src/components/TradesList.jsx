@@ -24,12 +24,15 @@ export default function TradesList() {
   const trades = useStore((s) => s.trades);
   const refreshTrades = useStore((s) => s.refreshTrades);
 
-  // refresh trades every 1.5s to catch settlements
+  // Poll for settlements — only while there are open trades, every 2s.
+  // Empty dep array: start once on mount. refreshTrades is a stable Zustand
+  // action so it never needs to be in the dep array.
+  const hasOpen = trades.some((t) => t.status === 'open');
   useEffect(() => {
-    refreshTrades();
-    const id = setInterval(refreshTrades, 1500);
+    if (!hasOpen) return; // no open trades — nothing to poll for
+    const id = setInterval(refreshTrades, 2000);
     return () => clearInterval(id);
-  }, [refreshTrades]);
+  }, [hasOpen]);
 
   return (
     <div className="trades-strip">

@@ -169,16 +169,20 @@ export default function App() {
     if (token && !user) loadMe();
   }, [token]);
 
-  // load market metadata & connect websocket once authenticated
+  // load market metadata & connect websocket once authenticated.
+  // Depend on user?.id (a stable primitive) NOT the full user object —
+  // refreshTrades writes back a new user reference on every poll which
+  // would otherwise re-trigger this effect and reconnect the WebSocket.
+  const userId = user?.id;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     loadMarketMeta();
     refreshTrades();
     const ws = connectStream((msg) => {
       if (msg.type === 'tick') ingestTick(msg);
     });
     return () => ws.close();
-  }, [user]);
+  }, [userId]);
 
   // toast auto-dismiss (CTA toasts linger longer so the user can click)
   useEffect(() => {

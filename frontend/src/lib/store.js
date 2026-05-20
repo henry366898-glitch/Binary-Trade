@@ -61,9 +61,13 @@ export const useStore = create((set, get) => ({
 
   refreshTrades: async () => {
     const [trades, stats] = await Promise.all([api.trades(), api.stats()]);
-    set({ trades, stats });
-    // also refresh balance
-    try { const user = await api.me(); set({ user }); } catch {}
+    // Update balance from stats in-place — avoids creating a new user object
+    // reference on every poll (which would re-trigger App's [userId] effect).
+    set((s) => ({
+      trades,
+      stats,
+      user: s.user ? { ...s.user, balance: stats.balance } : s.user,
+    }));
   },
 
   resetBalance: async () => {
