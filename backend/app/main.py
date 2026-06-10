@@ -13,11 +13,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import admin, auth, leads, market, trades
+from app.config import settings
+from app.routers import admin, auth, leads, market, sportsbook, trades
 from app.services.binance_feed import binance_feed_loop
 from app.services.db import init_db
 from app.services.mt5_feed import price_feed
 from app.services.settlement import settlement_loop
+from app.services.sportsbook_feed import feed_loop as sportsbook_feed_loop
+from app.services.sportsbook_settlement import settlement_loop as sportsbook_settlement_loop
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s — %(message)s")
 logger = logging.getLogger(__name__)
@@ -38,6 +41,14 @@ async def lifespan(app: FastAPI):
     logger.info("Starting trade settlement loop…")
     settle_task = asyncio.create_task(settlement_loop())
 
+    sportsbook_tasks = []
+    if settings.SPORTSBOOK_ENABLED:
+        logger.info("Starting sportsbook feed + settlement loops…")
+        sportsbook_tasks = [
+            asyncio.create_task(sportsbook_feed_loop()),
+            asyncio.create_task(sportsbook_settlement_loop()),
+        ]
+
     yield
 
     # shutdown
@@ -46,7 +57,9 @@ async def lifespan(app: FastAPI):
     feed_task.cancel()
     binance_task.cancel()
     settle_task.cancel()
-    for t in (feed_task, binance_task, settle_task):
+    for t in sportsbook_tasks:
+        t.cancel()
+    for t in (feed_task, binance_task, settle_task, *sportsbook_tasks):
         try:
             await t
         except (asyncio.CancelledError, Exception):
@@ -73,6 +86,7 @@ app.include_router(market.router)
 app.include_router(trades.router)
 app.include_router(leads.router)
 app.include_router(admin.router)
+app.include_router(sportsbook.router)
 
 
 @app.get("/")

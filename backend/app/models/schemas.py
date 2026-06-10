@@ -3,7 +3,7 @@ import re
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from app.models.db import AdjustmentStatus, AdminRole, TradeDirection, TradeStatus
+from app.models.db import AdjustmentStatus, AdminRole, BetStatus, TradeDirection, TradeStatus
 
 
 ALLOWED_COUNTRIES = {
@@ -232,3 +232,48 @@ class PaymentTypeOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ---------- Sportsbook ----------
+
+class BetPlaceIn(BaseModel):
+    event_id: str
+    market_key: str
+    selection_key: str
+    stake: float = Field(gt=0, le=1_000_000)
+
+
+class BetLegOut(BaseModel):
+    event_id: str
+    sport: str
+    match: str
+    market_key: str
+    market_name: str
+    selection_key: str
+    selection_name: str
+    odds: float
+    line: Optional[float] = None
+    result: Optional[str] = None        # won | lost | push | None (pending)
+
+
+class BetOut(BaseModel):
+    id: str
+    bet_type: str
+    stake: float
+    legs: list[BetLegOut]
+    combined_odds: float
+    potential_payout: float
+    status: BetStatus
+    profit: float
+    placed_at: datetime
+    settled_at: Optional[datetime] = None
+
+
+class BetStatsOut(BaseModel):
+    total_bets: int
+    wins: int
+    losses: int
+    win_rate: float
+    total_staked: float
+    total_profit: float
+    balance: float

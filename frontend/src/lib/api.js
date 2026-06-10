@@ -41,6 +41,13 @@ export const api = {
   createTransaction: (data) => request('/trades/transactions', { method: 'POST', body: JSON.stringify(data) }),
   paymentTypes: (direction) => request(`/trades/payment_types${direction ? `?direction=${direction}` : ''}`),
 
+  // ----- Sportsbook -----
+  sbSports:   () => request('/sportsbook/sports'),
+  sbEvents:   (sport) => request(`/sportsbook/events${sport ? `?sport=${encodeURIComponent(sport)}` : ''}`),
+  sbPlaceBet: (data) => request('/sportsbook/bets', { method: 'POST', body: JSON.stringify(data) }),
+  sbBets:     (limit = 50) => request(`/sportsbook/bets?limit=${limit}`),
+  sbStats:    () => request('/sportsbook/stats'),
+
   uploadTransactionProof: async (id, file) => {
     const fd = new FormData();
     fd.append('file', file);

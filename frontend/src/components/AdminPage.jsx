@@ -672,6 +672,108 @@ function TradesPage() {
   );
 }
 
+// ---------- Sportsbook bets (global) ----------
+
+function BetsPage() {
+  const [bets, setBets] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [busyId, setBusyId] = useState(null);
+
+  const load = async () => {
+    setLoading(true); setError('');
+    try {
+      const params = new URLSearchParams({ limit: '300' });
+      if (statusFilter) params.set('status', statusFilter);
+      const d = await api(`/api/admin/bets?${params.toString()}`);
+      setBets(d.bets || []);
+    } catch (e) { setError(e.message); } finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [statusFilter]);
+
+  const voidBet = async (id) => {
+    if (!confirm('Void this open bet and refund the stake to the client?')) return;
+    setBusyId(id);
+    try { await api(`/api/admin/bets/${id}/void`, { method: 'POST' }); await load(); }
+    catch (e) { alert(e.message); } finally { setBusyId(null); }
+  };
+
+  const staked = bets.reduce((s, b) => s + (b.stake || 0), 0);
+  const totalPL = bets.reduce((s, b) => s + (b.status === 'open' ? 0 : (b.profit || 0)), 0);
+
+  return (
+    <>
+      <div className="page-header">
+        <div className="page-title">Betting</div>
+        <div className="page-subtitle">
+          <strong>{bets.length}</strong> shown · staked <strong>{fmtMoney(staked)}</strong> · client net{' '}
+          <strong style={{ color: totalPL >= 0 ? 'var(--up)' : 'var(--down)' }}>{fmtSigned(totalPL)}</strong>
+        </div>
+      </div>
+      <div className="admin-toolbar">
+        <select className="admin-search" style={{ maxWidth: 200 }} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          <option value="open">open</option>
+          <option value="won">won</option>
+          <option value="lost">lost</option>
+          <option value="void">void</option>
+        </select>
+        <div style={{ flex: 1 }} />
+        <div className="admin-actions">
+          <button className="admin-btn" onClick={load} disabled={loading}>{loading ? '…' : 'Refresh'}</button>
+          <button className="admin-btn" onClick={() => {
+            const params = new URLSearchParams({ format: 'xlsx', limit: '1000' });
+            if (statusFilter) params.set('status', statusFilter);
+            downloadAuthed(`/api/admin/bets?${params}`, 'edgetrade_bets.xlsx');
+          }}>Export</button>
+        </div>
+      </div>
+      {error && <div className="admin-error">{error}</div>}
+      <div className="admin-table-wrap">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Placed</th><th>Client</th><th>Sport</th><th>Selection</th>
+              <th style={{ textAlign: 'right' }}>Stake</th>
+              <th style={{ textAlign: 'right' }}>Odds</th>
+              <th style={{ textAlign: 'right' }}>Potential</th>
+              <th>Status</th>
+              <th style={{ textAlign: 'right' }}>P&L</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bets.length === 0 && !loading && (
+              <tr><td colSpan={10} style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>No bets match.</td></tr>
+            )}
+            {bets.map((b) => (
+              <tr key={b.id}>
+                <td className="mono">{fmtDate(b.placed_at)}</td>
+                <td>{b.user_name} <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>#{b.user_id}</span></td>
+                <td className="mono">{b.sport}</td>
+                <td className="cell-wrap">{b.selection}</td>
+                <td className="mono" style={{ textAlign: 'right' }}>{fmtMoney(b.stake)}</td>
+                <td className="mono" style={{ textAlign: 'right' }}>{(b.combined_odds || 0).toFixed(2)}</td>
+                <td className="mono" style={{ textAlign: 'right' }}>{fmtMoney(b.potential_payout)}</td>
+                <td><span className={`tag ${b.status}`}>{b.status}</span></td>
+                <td className="mono" style={{ textAlign: 'right', color: b.profit > 0 ? 'var(--up)' : b.profit < 0 ? 'var(--down)' : 'inherit' }}>
+                  {b.status === 'open' ? '—' : fmtSigned(b.profit)}
+                </td>
+                <td>
+                  {b.status === 'open'
+                    ? <button className="admin-row-btn" style={{ color: 'var(--down)' }} disabled={busyId === b.id} onClick={() => voidBet(b.id)}>{busyId === b.id ? '…' : 'Void'}</button>
+                    : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 // ---------- Approve verification modal (math challenge to confirm) ----------
 
 function ApproveVerifyModal({ txn, onClose, onConfirmed }) {
@@ -1651,6 +1753,7 @@ function AdminsPage({ currentAdmin }) {
 const NAV_ITEMS = [
   { key: 'clients',       label: 'Clients',       icon: 'C' },
   { key: 'trades',        label: 'Trades',        icon: 'T' },
+  { key: 'bets',          label: 'Betting',       icon: 'B' },
   { key: 'transactions',  label: 'Transactions',  icon: '$' },
   { key: 'payment_types', label: 'Payment Types', icon: 'P' },
   { key: 'admins',        label: 'Admins',        icon: 'A', superOnly: true },
@@ -1695,6 +1798,7 @@ export default function AdminPage() {
       ? <ClientDetail clientId={selectedClientId} onBack={() => setSelectedClientId(null)} />
       : <ClientsPage onOpenClient={setSelectedClientId} />;
   } else if (nav === 'trades')        page = <TradesPage />;
+  else if (nav === 'bets')            page = <BetsPage />;
   else if (nav === 'transactions')    page = <TransactionsPage />;
   else if (nav === 'payment_types')   page = <PaymentTypesPage />;
   else if (nav === 'admins')          page = <AdminsPage currentAdmin={admin} />;

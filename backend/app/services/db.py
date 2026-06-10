@@ -6,7 +6,7 @@ from beanie import init_beanie
 
 from app.config import settings
 from app.models.db import (
-    AcademyClick, AdminUser, BalanceAdjustment, PaymentType, Trade, User,
+    AcademyClick, AdminUser, BalanceAdjustment, Bet, PaymentType, SportEvent, Trade, User,
 )
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,10 @@ async def init_db() -> None:
     _motor_client = motor.motor_asyncio.AsyncIOMotorClient(settings.DATABASE_URL)
     await init_beanie(
         database=_motor_client[settings.DATABASE_NAME],
-        document_models=[User, Trade, AdminUser, BalanceAdjustment, PaymentType, AcademyClick],
+        document_models=[
+            User, Trade, AdminUser, BalanceAdjustment, PaymentType, AcademyClick,
+            SportEvent, Bet,
+        ],
     )
     logger.info("MongoDB connected — database: %s", settings.DATABASE_NAME)
 

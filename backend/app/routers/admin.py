@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from beanie import PydanticObjectId
+from beanie.operators import Inc
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ from pydantic import BaseModel, Field
 from app.config import settings
 from app.models.db import (
     AcademyClick, AdjustmentStatus, AdminRole, AdminUser,
-    BalanceAdjustment, PaymentType, Trade, TradeStatus, User,
+    BalanceAdjustment, Bet, BetStatus, PaymentType, Trade, TradeStatus, User,
 )
 from app.models.schemas import (
     AdminAuthStatus, AdminBootstrap, AdminCreate, AdminLogin, AdminOut, AdminTokenOut,
@@ -284,6 +285,86 @@ async def all_trades(
     if format == "csv":
         return _rows_to_csv(rows, filename="edgetrade_trades.csv")
     return {"count": len(rows), "trades": rows}
+
+
+# ---------- Sportsbook bets (admin view) ----------
+
+@router.get("/bets")
+async def all_bets(
+    limit: int = Query(200, ge=1, le=1000),
+    offset: int = Query(0, ge=0),
+    user_id: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status"),
+    format: str = Query("json", description="json | csv | xlsx"),
+    _: AdminUser = Depends(get_current_admin),
+):
+    match: dict = {}
+    if user_id:
+        match["user_id"] = PydanticObjectId(user_id)
+    if status_filter:
+        match["status"] = status_filter
+
+    pipeline = [
+        *([{"$match": match}] if match else []),
+        {"$sort": {"placed_at": -1}},
+        {"$skip": offset},
+        {"$limit": limit},
+        {"$lookup": {"from": "users", "localField": "user_id", "foreignField": "_id", "as": "user"}},
+        {"$unwind": {"path": "$user", "preserveNullAndEmptyArrays": True}},
+    ]
+    rows_raw = await Bet.get_motor_collection().aggregate(pipeline).to_list(None)
+    rows = []
+    for r in rows_raw:
+        legs = r.get("legs", []) or []
+        first = legs[0] if legs else {}
+        # Flatten the first leg for the table; full legs kept for detail/export.
+        rows.append({
+            "id": str(r["_id"]),
+            "user_id": str(r["user_id"]) if r.get("user_id") else None,
+            "user_name": r.get("user", {}).get("full_name"),
+            "user_email": r.get("user", {}).get("email"),
+            "bet_type": r.get("bet_type"),
+            "selection": " + ".join(
+                f'{l.get("match")} — {l.get("selection_name")}' for l in legs
+            ) or (first.get("selection_name")),
+            "sport": first.get("sport"),
+            "stake": r.get("stake"),
+            "combined_odds": r.get("combined_odds"),
+            "potential_payout": r.get("potential_payout"),
+            "status": r.get("status"),
+            "profit": r.get("profit"),
+            "legs": legs,
+            "placed_at": r["placed_at"].isoformat() if r.get("placed_at") else None,
+            "settled_at": r["settled_at"].isoformat() if r.get("settled_at") else None,
+        })
+    if format == "xlsx":
+        export_rows = [{k: v for k, v in row.items() if k != "legs"} for row in rows]
+        return _rows_to_xlsx(export_rows, filename="edgetrade_bets.xlsx", sheet_name="Bets")
+    if format == "csv":
+        export_rows = [{k: v for k, v in row.items() if k != "legs"} for row in rows]
+        return _rows_to_csv(export_rows, filename="edgetrade_bets.csv")
+    return {"count": len(rows), "bets": rows}
+
+
+@router.post("/bets/{bet_id}/void")
+async def void_bet(
+    bet_id: str,
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """Cancel an OPEN bet and refund the stake to the user's balance."""
+    bet = await Bet.get(bet_id)
+    if not bet:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Bet not found")
+    if bet.status != BetStatus.OPEN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Only open bets can be voided")
+    bet.status = BetStatus.VOID
+    bet.profit = 0.0
+    bet.settled_at = datetime.utcnow()
+    for leg in bet.legs:
+        leg["result"] = "push"
+    await bet.save()
+    await User.find_one(User.id == bet.user_id).update(Inc({User.balance: bet.stake}))
+    return {"ok": True, "refunded": bet.stake}
 
 
 # ---------- Transactions (admin view) ----------

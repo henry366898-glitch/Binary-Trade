@@ -30,6 +30,19 @@ class AdjustmentStatus(str, enum.Enum):
     REJECTED = "rejected"
 
 
+class SportEventStatus(str, enum.Enum):
+    SCHEDULED = "scheduled"   # pre-match — betting open
+    LIVE = "live"             # in progress — betting closed (Stage 1)
+    FINISHED = "finished"     # result known — bets can settle
+
+
+class BetStatus(str, enum.Enum):
+    OPEN = "open"
+    WON = "won"
+    LOST = "lost"
+    VOID = "void"             # push / cancelled — stake refunded
+
+
 class User(Document):
     account_number: Optional[str] = None
     email: str
@@ -112,6 +125,65 @@ class BalanceAdjustment(Document):
     class Settings:
         name = "balance_adjustments"
         indexes = ["user_id", "status", "created_at"]
+
+
+class SportEvent(Document):
+    """A simulated sporting fixture with embedded betting markets.
+
+    Markets are stored as plain dicts so the schema can flex per sport:
+        markets = [
+          {"key": "1x2", "name": "Match Result",
+           "selections": [{"key": "home", "name": "...", "odds": 2.10}, ...]},
+          {"key": "totals", "name": "Total", "line": 2.5,
+           "selections": [{"key": "over", "name": "Over 2.5", "odds": 1.9, "line": 2.5}, ...]},
+          {"key": "spread", "name": "Handicap",
+           "selections": [{"key": "home", "name": "... -1.5", "odds": 2.0, "line": -1.5}, ...]},
+        ]
+    `sim` holds the hidden generative parameters used to produce a coherent
+    result at finish time. It is never sent to clients.
+    """
+    sport: str
+    league: str
+    country: Optional[str] = None
+    home: str
+    away: str
+    start_time: datetime
+    status: SportEventStatus = SportEventStatus.SCHEDULED
+    home_score: Optional[int] = None
+    away_score: Optional[int] = None
+    markets: list = Field(default_factory=list)
+    result: Optional[dict] = None         # {winner, home_score, away_score}
+    sim: Optional[dict] = None            # hidden generative params
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Settings:
+        name = "sport_events"
+        indexes = ["sport", "status", "start_time"]
+
+
+class Bet(Document):
+    """A wager placed against the shared virtual balance.
+
+    A single bet has one leg; a parlay (Stage 2) has many. Each leg snapshots
+    the odds at placement so later odds drift cannot change the payout.
+        legs = [{event_id, sport, match, market_key, market_name,
+                 selection_key, selection_name, odds, line, result}]
+    """
+    user_id: PydanticObjectId
+    bet_type: str = "single"             # single | parlay (later)
+    stake: float
+    legs: list = Field(default_factory=list)
+    combined_odds: float
+    potential_payout: float
+    status: BetStatus = BetStatus.OPEN
+    profit: float = 0.0
+    placed_at: datetime = Field(default_factory=datetime.utcnow)
+    settled_at: Optional[datetime] = None
+
+    class Settings:
+        name = "bets"
+        indexes = ["user_id", "status", "placed_at"]
 
 
 class PaymentType(Document):

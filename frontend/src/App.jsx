@@ -10,6 +10,7 @@ import ConversionModal from './components/ConversionModal';
 import { Disclaimer, Privacy, Terms } from './components/LegalPages';
 import AdminPage from './components/AdminPage';
 import TransactionsPage from './components/TransactionsPage';
+import Sportsbook from './components/Sportsbook';
 import ThemeToggle from './components/ThemeToggle';
 import { openAcademyCta } from './lib/leadCta';
 
@@ -62,6 +63,7 @@ function Header({ onLogout }) {
           <span className="lbl">Balance</span>
           <span className="val">${user?.balance.toFixed(2) ?? '0.00'}</span>
         </div>
+        <a className="header-link" href="/sportsbook">Sportsbook</a>
         <a className="header-link" href="/transactions">Transactions</a>
         <ThemeToggle />
         <button className="logout-btn" onClick={onLogout}>Logout</button>
@@ -110,6 +112,7 @@ export default function App() {
   if (path === '/terms')        return <Terms />;
   if (path === '/admin')        return <AdminPage />;
   if (path === '/transactions') return <TransactionsPage />;
+  if (path === '/sportsbook')   return <Sportsbook />;
 
   const { user, token, setUser, logout, loadMe, loadMarketMeta, ingestTick, refreshTrades, trades, resetBalance } = useStore();
   const [toast, setToast] = useState(null);

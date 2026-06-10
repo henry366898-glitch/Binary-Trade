@@ -29,6 +29,18 @@ class Settings(BaseSettings):
     MAX_TRADE_AMOUNT: float = 1000.0
     EXPIRY_OPTIONS_SECONDS: list[int] = [30, 60, 120, 300, 600]
 
+    # Sportsbook (educational, virtual money — uses the SAME balance as trading)
+    SPORTSBOOK_ENABLED: bool = True
+    MIN_BET_AMOUNT: float = 1.0
+    MAX_BET_AMOUNT: float = 1000.0
+    # Keep at least this many upcoming (scheduled) events live in the catalogue
+    SPORTSBOOK_MIN_UPCOMING: int = 60
+    # How long a simulated match "runs" before a result is produced (seconds).
+    # Short by design so the educational sim settles quickly.
+    SPORTSBOOK_LIVE_SECONDS: int = 90
+    # How far ahead new fixtures are scheduled (seconds, randomised up to this).
+    SPORTSBOOK_SCHEDULE_WINDOW: int = 1800
+
     # Database
     DATABASE_URL: str = "mongodb://localhost:27017"
     DATABASE_NAME: str = "edgetrade"
