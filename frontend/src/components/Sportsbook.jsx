@@ -209,7 +209,10 @@ export default function Sportsbook() {
           <div className="sb-events">
             {loading && <div className="sb-muted" style={{ padding: 24 }}>Loading fixtures…</div>}
             {!loading && events.length === 0 && (
-              <div className="sb-muted" style={{ padding: 24 }}>No fixtures right now — the simulator is scheduling more, check back in a moment.</div>
+              <div className="sb-empty">
+                <div className="sb-empty-title">Sports betting is launching soon</div>
+                <div className="sb-muted">Live fixtures and odds aren’t available just yet — please check back shortly.</div>
+              </div>
             )}
             {events.map((ev) => {
               const live = ev.status === 'live';
