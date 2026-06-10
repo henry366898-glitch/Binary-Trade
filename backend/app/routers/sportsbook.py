@@ -12,7 +12,6 @@ from app.config import settings
 from app.models.db import Bet, BetStatus, SportEvent, SportEventStatus, User
 from app.models.schemas import BetOut, BetPlaceIn, BetStatsOut
 from app.services.auth import get_current_user
-from app.services.sportsbook_logic import CATALOGUE, SPORT_PROFILES
 
 router = APIRouter(prefix="/api/sportsbook", tags=["sportsbook"])
 
@@ -56,17 +55,17 @@ def _bet_out(b: Bet) -> BetOut:
 
 
 @router.get("/sports")
-async def list_sports(_: None = Depends(_require_enabled)):
-    """The catalogue of sports + leagues, for filter UI."""
-    out = []
-    for sport, blocks in CATALOGUE.items():
-        out.append({
-            "sport": sport,
-            "leagues": [{"league": b["league"], "country": b.get("country")} for b in blocks],
-            "winner_only": SPORT_PROFILES.get(sport, {}).get("avg_total") is None,
-        })
+async def list_sports(
+    _: None = Depends(_require_enabled),
+    __: User = Depends(get_current_user),
+):
+    """Sports currently available to bet on — derived from live/upcoming events."""
+    sports = await SportEvent.get_motor_collection().distinct(
+        "sport",
+        {"status": {"$in": [SportEventStatus.SCHEDULED.value, SportEventStatus.LIVE.value]}},
+    )
     return {
-        "sports": out,
+        "sports": [{"sport": s} for s in sorted(sports)],
         "min_bet": settings.MIN_BET_AMOUNT,
         "max_bet": settings.MAX_BET_AMOUNT,
     }

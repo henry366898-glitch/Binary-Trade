@@ -37,6 +37,9 @@ jobs:
       - name: Sportsbook logic tests (no third-party deps)
         working-directory: backend
         run: python tests/test_sportsbook_logic.py
+      - name: Odds API mapper tests (no third-party deps)
+        working-directory: backend
+        run: python tests/test_odds_api_mappers.py
 
   deploy:
     name: Deploy over SSH

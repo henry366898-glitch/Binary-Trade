@@ -153,13 +153,16 @@ class SportEvent(Document):
     away_score: Optional[int] = None
     markets: list = Field(default_factory=list)
     result: Optional[dict] = None         # {winner, home_score, away_score}
-    sim: Optional[dict] = None            # hidden generative params
+    sim: Optional[dict] = None            # (legacy sim params; unused with real feed)
+    # Real-data provenance (The Odds API). provider_id dedupes upserts.
+    provider: Optional[str] = None
+    provider_id: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Settings:
         name = "sport_events"
-        indexes = ["sport", "status", "start_time"]
+        indexes = ["sport", "status", "start_time", "provider_id"]
 
 
 class Bet(Document):
